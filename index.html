@@ -7945,6 +7945,8 @@ const redraw = () => { qsCache = null; if (S.tab === "hideout") { drawTabs(); dr
 // ---------- Fehler melden ----------
 // Fragt das Wichtigste ab und hängt technische Angaben selbst an. Nichts wird verschickt: der Bericht wird kopiert
 // oder als Datei gespeichert und dann weitergeleitet.
+// Meldungen landen als Issue im öffentlichen Repository, dort liest Claude sie aus
+const BUG_REPO = "LukyLuke07/tarkov";
 const BUG_AREAS = [["maps", "Karte, Quest-Ziele, Wege"], ["profil", "Profil, Questbaum, Händler"], ["inventar", "Inventar: Scan, Verkaufen, Kiste"], ["hideout", "Hideout"], ["zirkel", "Zirkel"], ["logs", "Logs, Questfortschritt"], ["modus", "Modus PvE, PvP, Season"], ["sonst", "Sonstiges"]];
 const bugArea = () => S.tab === "inventar" ? "inventar" : S.tab === "hideout" ? "hideout" : S.tab === "zirkel" ? "zirkel" : S.tab === "profil" ? "profil" : "maps";
 const bugInfo = () => { const C = S.cc || {}, K = C.sorted || {}, tot = o => Object.values(o || {}).reduce((s, x) => s + (x.n || 0), 0), st = Object.values(S.status || {});
@@ -7968,7 +7970,7 @@ const bugOpen = () => {
   let m = document.getElementById("bugModal"); if (m) m.remove();
   m = document.createElement("div"); m.id = "bugModal"; m.className = "bug-modal";
   const info = bugInfo();
-  m.innerHTML = `<div class="bug-box"><h3>Fehler melden <small>Daraus wird ein Text zum Weiterleiten. Es wird nichts verschickt.</small></h3>
+  m.innerHTML = `<div class="bug-box"><h3>Fehler melden <small>Am einfachsten als GitHub-Issue, dafür brauchst du ein GitHub-Konto. Oder kopieren und im Chat einfügen.</small></h3>
     <label>Wo ist es passiert?<select data-b="area">${BUG_AREAS.map(([k, n]) => `<option value="${k}" ${k === bugArea() ? "selected" : ""}>${n}</option>`).join("")}</select></label>
     <label>Was hast du gemacht? <small>Schritt für Schritt, etwa: Inventar geöffnet, Kiste gewählt, Bild eingefügt, übernommen</small><textarea data-b="steps" rows="3"></textarea></label>
     <label>Was ist passiert? <small>möglichst genau, mit Zahlen oder Item-Namen</small><textarea data-b="got" rows="3"></textarea></label>
@@ -7979,7 +7981,7 @@ const bugOpen = () => {
     <label>Sonst noch wichtig? <small>optional</small><textarea data-b="extra" rows="2"></textarea></label>
     <details><summary>Wird automatisch angehängt</summary><pre>${ccEsc(info.map(([k, v]) => `${k}: ${v}`).join("\n"))}</pre></details>
     <p class="bug-msg" id="bugMsg"></p>
-    <div class="bug-act"><button data-bact="copy" class="pri">Bericht kopieren</button><button data-bact="file">Als Datei speichern</button><button data-bact="close">Abbrechen</button></div></div>`;
+    <div class="bug-act"><button data-bact="issue" class="pri" title="Öffnet auf GitHub ein neues Issue mit dem fertigen Bericht, du klickst dort nur noch auf Submit">Als GitHub-Issue melden</button><button data-bact="copy">Bericht kopieren</button><button data-bact="file">Als Datei speichern</button><button data-bact="close">Abbrechen</button></div></div>`;
   document.body.appendChild(m);
   const val = () => { const f = {}; m.querySelectorAll("[data-b]").forEach(e => f[e.dataset.b] = e.type === "checkbox" ? e.checked : e.value.trim()); return f; };
   const need = f => !f.got ? "Bitte zumindest ausfüllen, was passiert ist." : "";
@@ -7987,7 +7989,16 @@ const bugOpen = () => {
     if (a.dataset.bact === "close") { m.remove(); return; }
     const f = val(), msg = document.getElementById("bugMsg"), n = need(f); if (n) { msg.textContent = n; msg.className = "bug-msg bad"; return; }
     const text = bugText(f);
-    if (a.dataset.bact === "copy") {
+    if (a.dataset.bact === "issue") {
+      // Titel aus Bereich und erster Zeile, Bericht ohne Spielstand. GitHub nimmt Adressen bis etwa 8.000 Zeichen,
+      // zu lange Berichte werden hinten gekürzt, dann lieber zusätzlich die Datei schicken.
+      const area = (BUG_AREAS.find(x => x[0] === f.area) || [, "Sonstiges"])[1].split(":")[0].split(",")[0];
+      const title = `[${area}] ${f.got.split("\n")[0].slice(0, 70)}`;
+      let body = text + (f.state ? "\n\nDen Spielstand hänge ich als Datei an." : ""), url;
+      for (;;) { url = `https://github.com/${BUG_REPO}/issues/new?labels=bug&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`; if (url.length < 7800 || body.length < 200) break; body = body.slice(0, Math.floor(body.length * 0.85)) + "\n\n(gekürzt)"; }
+      window.open(url, "_blank", "noopener");
+      msg.textContent = "GitHub ist in einem neuen Tab offen. Dort nur noch auf „Submit new issue“ klicken" + (f.shot ? ", den Screenshot kannst du ins Textfeld ziehen." : "."); msg.className = "bug-msg ok";
+    } else if (a.dataset.bact === "copy") {
       try { await navigator.clipboard.writeText(text); } catch (err) { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
       msg.textContent = "Kopiert. Jetzt einfach im Chat einfügen" + (f.shot ? " und den Screenshot dazulegen." : "."); msg.className = "bug-msg ok";
     } else {
